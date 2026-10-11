@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "bot",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": ["run", "python", "bot.py"],
+      "port": 8080
+    }
+  ]
+}

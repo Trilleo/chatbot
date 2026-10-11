@@ -1,0 +1,85 @@
+# The whole bot: NapCat (QQ, OneBot v11) and NoneBot.
+#
+# Locally:     docker compose up -d --build   (reads ./.env; docker-compose.override.yml
+#              adds the builds, so the images are built from this checkout)
+# On server:   deploy/server/chatbot-deploy runs this file alone from /srv/chatbot, with
+#              the images from SWR (BOT_IMAGE and NAPCAT_IMAGE, in release.env). It ships
+#              inside the bot image, so it always matches the running release.
+#
+# Nothing here is published to the internet. NapCat connects to NoneBot over the
+# internal `onebot` network; the only host port is NapCat's WebUI on 127.0.0.1, for
+# the QR login through an SSH tunnel (README.md).
+name: chatbot
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  # NoneBot. Migrates its database on start, then serves the reverse WebSocket.
+  bot:
+    image: ${BOT_IMAGE:-chatbot-bot:local}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Fixed inside the container, whatever .env says for local runs.
+      HOST: 0.0.0.0
+      PORT: "8080"
+    volumes:
+      - bot-data:/data
+    networks:
+      - onebot
+      - egress
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    logging: *logging
+
+  # NapCat: headless QQ. Its two volumes hold the QQ login (device data, used for
+  # quick login) and NapCat's config, so restarts don't need a new QR scan.
+  napcat:
+    image: ${NAPCAT_IMAGE:-chatbot-napcat:local}
+    restart: unless-stopped
+    environment:
+      ACCOUNT: ${QQ_ACCOUNT:?QQ_ACCOUNT must be set in .env}
+      ONEBOT_ACCESS_TOKEN: ${ONEBOT_ACCESS_TOKEN:?ONEBOT_ACCESS_TOKEN must be set in .env}
+      ONEBOT_URL: ws://bot:8080/onebot/v11/ws
+      WEBUI_TOKEN: ${NAPCAT_WEBUI_TOKEN:?NAPCAT_WEBUI_TOKEN must be set in .env}
+      # QQ runs as this user, not root.
+      NAPCAT_UID: "1000"
+      NAPCAT_GID: "1000"
+    # A stable hostname and MAC address keep the device QQ sees the same across
+    # container re-creations; a "new device" can mean a new QR login and risk checks.
+    hostname: chatbot-qq
+    ports:
+      - "127.0.0.1:6099:6099"
+    volumes:
+      - napcat-qq:/app/.config/QQ
+      - napcat-config:/app/napcat/config
+    networks:
+      onebot: {}
+      egress:
+        mac_address: "02:42:ac:1e:00:02"
+    # The image's entrypoint changes users and file ownership, so it keeps Docker's
+    # default capabilities.
+    security_opt:
+      - no-new-privileges:true
+    logging: *logging
+
+networks:
+  # NapCat ↔ NoneBot only: no internet access, nothing published.
+  onebot:
+    internal: true
+  # Internet access (QQ's servers for NapCat; LLM APIs for the bot).
+  egress: {}
+
+volumes:
+  bot-data:
+  napcat-qq:
+  napcat-config:

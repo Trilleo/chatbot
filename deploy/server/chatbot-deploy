@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# Deploys one release: pulls the images for a commit, starts the stack, and waits until
+# the bot is healthy. Installed on the server as /usr/local/bin/chatbot-deploy (owned by
+# root, so the deploy user can run it but not change it). See deploy/README.md.
+#
+#   From CI, as the deploy user's SSH forced command:  ssh deploy@server <git-sha>
+#   By hand, e.g. to roll back (as root):  sudo -u deploy chatbot-deploy <git-sha>
+#
+# NapCat (and with it the QQ login) is only re-created when its image changes, that is
+# when napcat/ changed in git; ordinary deploys restart the bot alone.
+set -euo pipefail
+
+APP_DIR=/srv/chatbot
+KEEP_IMAGES=5
+
+# A forced command receives the client's command in SSH_ORIGINAL_COMMAND.
+tag="${SSH_ORIGINAL_COMMAND:-${1:-}}"
+if [[ ! "$tag" =~ ^[0-9a-f]{40}$ ]]; then
+	echo "usage: chatbot-deploy <40-character git commit SHA>" >&2
+	exit 64
+fi
+
+cd "$APP_DIR"
+if [[ ! -f .env ]]; then
+	echo "$APP_DIR/.env is missing; see deploy/README.md" >&2
+	exit 1
+fi
+registry="$(<registry)" # e.g. swr.cn-southwest-2.myhuaweicloud.com/trilleo
+bot="$registry/chatbot:$tag"
+
+echo "==> Pulling $tag"
+docker pull --quiet "$bot"
+
+echo "==> Taking docker-compose.yml from the image"
+docker run --rm --entrypoint cat "$bot" /deploy/docker-compose.yml >docker-compose.yml.new
+napcat_tag="$(docker run --rm --entrypoint cat "$bot" /deploy/napcat-tag)"
+mv docker-compose.yml.new docker-compose.yml
+napcat="$registry/napcat:$napcat_tag"
+if ! docker image inspect "$napcat" >/dev/null 2>&1; then
+	echo "==> Pulling NapCat $napcat_tag (NapCat will restart)"
+	docker pull --quiet "$napcat"
+fi
+printf 'BOT_IMAGE=%s\nNAPCAT_IMAGE=%s\n' "$bot" "$napcat" >release.env
+
+compose=(docker compose --env-file .env --env-file release.env)
+
+echo "==> Starting"
+# --no-build: images come from SWR only; the server can't reach the base images.
+if ! "${compose[@]}" up --detach --no-build --wait --wait-timeout 180 --remove-orphans; then
+	"${compose[@]}" ps --all >&2
+	"${compose[@]}" logs --tail 50 bot >&2
+	exit 1
+fi
+
+live="$("${compose[@]}" exec -T bot python -c \
+	"import json, urllib.request; print(json.load(urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=5))['version'])")"
+if [[ "$live" != "$tag" ]]; then
+	echo "The bot reports version '$live', expected $tag" >&2
+	exit 1
+fi
+printf '%s\n' "$tag" >current
+echo "==> Live: $tag"
+
+# Keep the newest few bot images for quick rollbacks (NapCat images are few and large;
+# the running one is never removed, as Docker refuses while a container uses it).
+for name in chatbot napcat; do
+	docker image ls "$registry/$name" --format '{{.CreatedAt}}|{{.Repository}}:{{.Tag}}' |
+		sort -r |
+		tail -n "+$((KEEP_IMAGES + 1))" |
+		cut -d '|' -f 2 |
+		xargs -r docker image rm >/dev/null 2>&1 || true
+done
+docker image prune --force >/dev/null

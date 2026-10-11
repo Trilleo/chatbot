@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  checks:
+    name: Format, lint, typecheck, test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          version: "0.13.0"
+          enable-cache: true
+      - run: uv sync --locked
+      - name: Format check
+        run: uv run ruff format --check
+      - name: Lint
+        run: uv run ruff check
+      - name: Typecheck
+        run: uv run mypy
+      - name: Unit tests
+        run: uv run pytest
+      # A fresh database, migrated, must match the models: a model change without a
+      # migration fails here. Fix: uv run python bot.py orm revision -m "..."
+      - name: Migrations match the models
+        env:
+          ONEBOT_ACCESS_TOKEN: ci
+        run: |
+          cp .env.example .env
+          uv run python bot.py orm upgrade
+          uv run python bot.py orm check
+
+  image:
+    name: Docker images
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      # Tagged by the napcat folder's git tree hash, as in the Deploy workflow.
+      - name: NapCat image tag
+        id: napcat
+        run: echo "tag=$(git rev-parse HEAD:napcat)" >> "$GITHUB_OUTPUT"
+      - name: Build the bot image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: bot
+          load: true
+          tags: chatbot-bot:ci
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+            NAPCAT_TAG=${{ steps.napcat.outputs.tag }}
+          cache-from: type=gha,scope=bot
+          cache-to: type=gha,mode=max,scope=bot
+      - name: Build the NapCat image
+        uses: docker/build-push-action@v7
+        with:
+          context: napcat
+          load: true
+          tags: chatbot-napcat:ci
+          cache-from: type=gha,scope=napcat
+          cache-to: type=gha,mode=max,scope=napcat
+      - name: Lint shell scripts
+        run: shellcheck deploy/*.sh deploy/server/chatbot-deploy napcat/start.sh
+      # Runs both containers the way the server does.
+      - name: Smoke test
+        run: bash deploy/smoke-test.sh chatbot-bot:ci chatbot-napcat:ci "${{ github.sha }}"

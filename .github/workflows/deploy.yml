@@ -1,0 +1,158 @@
+name: Deploy
+
+# Ships main to the server after CI passes. Setup: deploy/README.md.
+#
+# Uploads to Huawei SWR (in mainland China) are slow, about 70 KB/s. A release's bot
+# image layers take seconds, but NapCat's image is large: its first upload, and the
+# one after each NapCat update, takes hours, hence the long time limit. That image is
+# tagged with the napcat folder's git tree hash and only built and pushed when SWR
+# lacks that tag, so ordinary releases skip it (and don't restart QQ).
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+  # Images: $REGISTRY/chatbot and $REGISTRY/napcat.
+  REGISTRY: ${{ vars.SWR_REGISTRY }}/${{ vars.SWR_ORG }}
+
+jobs:
+  bot:
+    name: Build and push the bot image
+    # After a successful CI run on a push to main (never for pull requests), or by
+    # hand; skipped until the Huawei SWR variables exist.
+    if: >-
+      vars.SWR_REGISTRY != '' && (
+        github.event_name == 'workflow_dispatch' || (
+          github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.event == 'push'
+        )
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SHA }}
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Log in to Huawei SWR
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ vars.SWR_REGISTRY }}
+          username: ${{ secrets.SWR_USERNAME }}
+          password: ${{ secrets.SWR_PASSWORD }}
+
+      - name: NapCat image tag
+        id: napcat
+        run: echo "tag=$(git rev-parse HEAD:napcat)" >> "$GITHUB_OUTPUT"
+
+      # Plain image manifests (no attestation index) for the widest registry support.
+      - name: Build and push the bot image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: bot
+          push: true
+          tags: ${{ env.REGISTRY }}/chatbot:${{ env.SHA }}
+          build-args: |
+            GIT_SHA=${{ env.SHA }}
+            NAPCAT_TAG=${{ steps.napcat.outputs.tag }}
+          cache-from: type=gha,scope=bot
+          cache-to: type=gha,mode=max,scope=bot
+          provenance: false
+          sbom: false
+
+  napcat:
+    name: Build and push NapCat, unless SWR has it
+    # Same condition as `bot`.
+    if: >-
+      vars.SWR_REGISTRY != '' && (
+        github.event_name == 'workflow_dispatch' || (
+          github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.event == 'push'
+        )
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SHA }}
+
+      - name: Log in to Huawei SWR
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ vars.SWR_REGISTRY }}
+          username: ${{ secrets.SWR_USERNAME }}
+          password: ${{ secrets.SWR_PASSWORD }}
+
+      - name: Check SWR for this NapCat image
+        id: napcat
+        run: |
+          tag="$(git rev-parse HEAD:napcat)"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if docker buildx imagetools inspect "$REGISTRY/napcat:$tag" >/dev/null 2>&1; then
+            echo "SWR already has napcat:$tag."
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Uploading napcat:$tag to SWR; a new NapCat version can take hours."
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: docker/setup-buildx-action@v4
+        if: steps.napcat.outputs.exists == 'false'
+
+      - name: Build and push the NapCat image
+        if: steps.napcat.outputs.exists == 'false'
+        uses: docker/build-push-action@v7
+        with:
+          context: napcat
+          platforms: linux/amd64
+          push: true
+          tags: ${{ env.REGISTRY }}/napcat:${{ steps.napcat.outputs.tag }}
+          cache-from: type=gha,scope=napcat
+          cache-to: type=gha,mode=max,scope=napcat
+          provenance: false
+          sbom: false
+
+  deploy:
+    name: Deploy to the server
+    needs: [bot, napcat]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: production
+    steps:
+      # chatbot-deploy waits until the bot is healthy and reports this SHA.
+      - name: Deploy on the server
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          # An empty secret otherwise surfaces as a vague SSH error.
+          for name in DEPLOY_HOST DEPLOY_SSH_KEY DEPLOY_KNOWN_HOSTS; do
+            if [ -z "${!name}" ]; then
+              echo "::error::The $name secret is empty; see deploy/README.md §5."
+              exit 1
+            fi
+          done
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          # The key's forced command runs chatbot-deploy with this SHA and nothing else.
+          ssh -i ~/.ssh/deploy_key -o BatchMode=yes -o ConnectTimeout=30 \
+            -o ServerAliveInterval=15 "deploy@${DEPLOY_HOST}" "$SHA"

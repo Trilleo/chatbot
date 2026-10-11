@@ -1,0 +1,10 @@
+# Local builds. Docker Compose reads this file automatically next to docker-compose.yml;
+# the server only has docker-compose.yml and runs the images from SWR.
+services:
+  bot:
+    build:
+      context: .
+      target: bot
+  napcat:
+    build:
+      context: napcat

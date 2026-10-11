@@ -1,0 +1,39 @@
+version: 2
+updates:
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+
+  # The bot's base images (Dockerfile). Each update means a slow first upload to SWR in
+  # China, so check monthly.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      base-images:
+        patterns: ["*"]
+    ignore:
+      # Python stays on the line in .python-version (3.13); a new minor is a deliberate
+      # change there, in pyproject.toml, and here together.
+      - dependency-name: python
+        update-types: [version-update:semver-minor, version-update:semver-major]
+
+  # NapCat (napcat/Dockerfile). An update re-uploads QQ to SWR (hours) and restarts the
+  # QQ login, so it gets its own PR; read NapCat's release notes before merging.
+  - package-ecosystem: docker
+    directory: /napcat
+    schedule:
+      interval: monthly
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]

@@ -1,0 +1,3 @@
+# Store and check out text files with LF, so scripts run in Linux containers
+# and Ruff's checks pass on Windows too.
+* text=auto eol=lf
