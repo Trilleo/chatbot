@@ -10,7 +10,7 @@ dependencies = [
     "nonebot-plugin-localstore>=0.7.4",
     "nonebot-plugin-orm[default]>=0.8.3",
     "nonebot2[fastapi]>=2.5.0",
-    "openai>=3.28.0",
+    "openai>=3.31.0",
 ]
 
 [dependency-groups]
