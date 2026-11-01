@@ -7,6 +7,6 @@
 # only when that tag is new: a NapCat update is a slow (30–90 minute) upload, and it
 # restarts QQ, so it happens only when this folder changes. Dependabot proposes
 # updates monthly; read NapCat's release notes before merging one.
-FROM mlikiowa/napcat-docker:v4.18.37
+FROM mlikiowa/napcat-docker:v4.18.41
 COPY --chmod=755 start.sh /usr/local/bin/chatbot-napcat-start
 ENTRYPOINT ["chatbot-napcat-start"]
