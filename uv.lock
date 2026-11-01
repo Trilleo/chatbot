@@ -3,15 +3,6 @@ revision = 5
 requires-python = "==3.13.*"
 
 [[package]]
-name = "aiosqlite"
-version = "0.22.1"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/4e/8a/64761f4005f17809769d23e518d915db74e6310474e733e3593cfc854ef1/aiosqlite-0.22.1.tar.gz", hash = "sha256:043e0bd78d32888c0a9ca90fc788b38796843360c855a7262a532813133a0650", size = 14821, upload-time = "2025-12-23T19:25:43.997Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/00/b7/e3bf5133d697a08128598c8d0abc5e16377b51465a33756de24fa7dee953/aiosqlite-0.22.1-py3-none-any.whl", hash = "sha256:21c002eb13823fad740196c5a2e9d8e62f6243bd9e7e4a1f87fb5e44ecb4fceb", size = 17405, upload-time = "2025-12-23T19:25:42.139Z" },
-]
-
-[[package]]
 name = "alembic"
 version = "1.20.0"
 source = { registry = "https://pypi.org/simple" }
@@ -194,7 +185,7 @@ dependencies = [
     { name = "nonebot-adapter-onebot" },
     { name = "nonebot-plugin-apscheduler" },
     { name = "nonebot-plugin-localstore" },
-    { name = "nonebot-plugin-orm", extra = ["default"] },
+    { name = "nonebot-plugin-orm" },
     { name = "nonebot2", extra = ["fastapi"] },
     { name = "openai" },
 ]
@@ -214,7 +205,7 @@ requires-dist = [
     { name = "nonebot-adapter-onebot", specifier = ">=2.4.6" },
     { name = "nonebot-plugin-apscheduler", specifier = ">=0.5.0" },
     { name = "nonebot-plugin-localstore", specifier = ">=0.7.4" },
-    { name = "nonebot-plugin-orm", extras = ["default"], specifier = ">=0.8.3" },
+    { name = "nonebot-plugin-orm", extras = ["default"], specifier = ">=0.8.4" },
     { name = "nonebot2", extras = ["fastapi"], specifier = ">=2.5.0" },
     { name = "openai", specifier = ">=3.36.0" },
 ]
@@ -633,24 +624,19 @@ wheels = [
 
 [[package]]
 name = "nonebot-plugin-orm"
-version = "0.8.3"
+version = "0.8.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "alembic" },
     { name = "click" },
     { name = "nonebot-plugin-localstore" },
     { name = "nonebot2" },
-    { name = "sqlalchemy" },
+    { name = "sqlalchemy", extra = ["asyncio"] },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/9c/70/06e8fffd9b7f88513507e0455806bc772dfbf150eafee10474dad7f5110f/nonebot_plugin_orm-0.8.3.tar.gz", hash = "sha256:c51918f6d39761c5e78185f58745dec888b95a7795b77c345bf97f08406f878d", size = 26491, upload-time = "2026-01-01T11:40:52.285Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/f8/ce/abffce111b2d9afd050279f15931fb83260c2244990c9df3a18e1ca1aea7/nonebot_plugin_orm-0.8.4.tar.gz", hash = "sha256:724737ffa23c7c959ab5687eb27f8c02e8167fd0efef1c1b09e5ef84da0e927b", size = 26337, upload-time = "2026-10-22T05:39:35.446Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/3d/ce/b14c6b5ced478403b7e7aaab24944e3071ca0bb30f62bb9c150a92800bb6/nonebot_plugin_orm-0.8.3-py3-none-any.whl", hash = "sha256:d64f01500a0eca1e25502347923fa54d0bff3cbe2531720adc1b0f485cd2d701", size = 31770, upload-time = "2026-01-01T11:40:50.854Z" },
-]
-
-[package.optional-dependencies]
-default = [
-    { name = "sqlalchemy", extra = ["aiosqlite"] },
+    { url = "https://files.pythonhosted.org/packages/32/b0/b1693461f1dc69524585e9a804e9882da9ee1af8353c00d6bd58f7fffd5f/nonebot_plugin_orm-0.8.4-py3-none-any.whl", hash = "sha256:9d96ed0e9204dce46eeb4003c122e724a00f287116394d269cc4089e03c1d2f9", size = 31759, upload-time = "2026-10-22T05:39:34.037Z" },
 ]
 
 [[package]]
@@ -970,8 +956,7 @@ wheels = [
 ]
 
 [package.optional-dependencies]
-aiosqlite = [
-    { name = "aiosqlite" },
+asyncio = [
     { name = "greenlet" },
 ]
 
