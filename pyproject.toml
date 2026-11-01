@@ -10,17 +10,17 @@ dependencies = [
     "nonebot-plugin-localstore>=0.7.4",
     "nonebot-plugin-orm[default]>=0.8.3",
     "nonebot2[fastapi]>=2.5.0",
-    "openai>=3.36.0",
+    "openai>=3.41.0",
 ]
 
 [dependency-groups]
 dev = [
     "httpx>=0.28.1",
-    "mypy>=2.4.0",
+    "mypy>=2.4.1",
     "nonebug>=0.4.4",
-    "pytest>=9.1.1",
-    "pytest-asyncio>=1.4.0",
-    "ruff>=0.17.1",
+    "pytest>=9.2.0",
+    "pytest-asyncio>=1.4.1",
+    "ruff>=0.17.3",
 ]
 
 # Read by bot.py (nonebot.load_from_toml). Each folder in src/plugins is one plugin.
