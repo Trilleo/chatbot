@@ -7,10 +7,10 @@
 # mainland China, which is slow (~70 KB/s from GitHub), so they change only on
 # purpose. Dependabot proposes updates monthly; keep .python-version in step.
 
-FROM ghcr.io/astral-sh/uv:0.13.0 AS uv
+FROM ghcr.io/astral-sh/uv:0.13.6 AS uv
 
 # 1. Install the locked dependencies into /app/.venv.
-FROM python:3.13.16-slim-trixie AS build
+FROM python:3.13.18-slim-trixie AS build
 COPY --from=uv /uv /usr/local/bin/uv
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
@@ -30,7 +30,7 @@ COPY .env.docker ./
 RUN python -m compileall -q src bot.py
 
 # 2. The runtime image: the venv and the code, no build tools.
-FROM python:3.13.16-slim-trixie AS bot
+FROM python:3.13.18-slim-trixie AS bot
 ARG GIT_SHA=dev
 ENV PATH=/app/.venv/bin:$PATH \
     PYTHONUNBUFFERED=1 \
